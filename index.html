@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบริหารเงินเดือน (Salary Manager)</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Sarabun -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- html2pdf.js for Direct PDF Download -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Loader Animation */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #3498db;
+            width: 20px;
+            height: 20px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Modal Transition */
+        .modal {
+            transition: opacity 0.25s ease;
+        }
+        body.modal-active {
+            overflow-x: hidden;
+            overflow-y: visible !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen pb-20">
+
+    <!-- Header -->
+    <header id="main-header" class="bg-gradient-to-r from-blue-900 to-slate-800 text-white p-6 shadow-lg relative z-20">
+        <div class="max-w-5xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-white/10 rounded-lg">
+                    <i data-lucide="calculator" class="w-8 h-8 text-blue-300"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold tracking-wide">Salary & Expense Manager</h1>
+                    <p class="text-blue-200 text-sm">ระบบบริหารเงินเดือนและค่าใช้จ่าย</p>
+                </div>
+            </div>
+            <div class="flex gap-3" data-html2canvas-ignore="true">
+                <!-- Changed onclick to openModal -->
+                <button onclick="openModal()" class="flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded-lg transition-all border border-red-500/30 cursor-pointer">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">ล้างค่าเริ่มต้น</span>
+                </button>
+                <button id="btn-export" onclick="downloadPDF()" class="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow-md transition-all font-medium cursor-pointer">
+                    <i id="icon-download" data-lucide="download" class="w-4 h-4"></i>
+                    <div id="loader-download" class="loader hidden"></div>
+                    <span>Export PDF</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area to be Printed -->
+    <div id="content-area" class="relative z-10">
+        <main class="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
+            
+            <!-- Report Header (Visible only in PDF) -->
+            <div class="hidden text-center mb-6" id="pdf-header">
+                <h2 class="text-2xl font-bold text-slate-800">รายงานสรุปรายรับ-รายจ่าย</h2>
+                <p class="text-slate-500">ประจำวันที่: <span id="reportDate"></span></p>
+                <hr class="mt-4 border-slate-200">
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Net Income -->
+                <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-6 flex flex-col justify-between shadow-sm card">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-slate-500 font-medium text-sm">รายรับสุทธิ (Net Income)</h3>
+                        <div class="p-2 rounded-lg bg-emerald-100 text-emerald-600">
+                            <i data-lucide="wallet" class="w-5 h-5"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <div id="displayNetIncome" class="text-2xl font-bold text-slate-700 tracking-tight">฿0.00</div>
+                        <p class="text-xs text-slate-400 mt-1">หลังหักภาษีและประกันสังคม</p>
+                    </div>
+                </div>
+
+                <!-- Total Expenses -->
+                <div class="rounded-xl border border-red-100 bg-red-50 p-6 flex flex-col justify-between shadow-sm card">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-slate-500 font-medium text-sm">รายจ่ายทั้งหมด (Expenses)</h3>
+                        <div class="p-2 rounded-lg bg-red-100 text-red-600">
+                            <i data-lucide="trending-down" class="w-5 h-5"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <div id="displayTotalExpenses" class="text-2xl font-bold text-slate-700 tracking-tight">฿0.00</div>
+                        <p id="expenseCount" class="text-xs text-slate-400 mt-1">0 รายการบันทึก</p>
+                    </div>
+                </div>
+
+                <!-- Balance -->
+                <div class="rounded-xl border border-blue-200 bg-white p-6 flex flex-col justify-between shadow-sm ring-2 ring-blue-500 card">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-slate-500 font-medium text-sm">เงินคงเหลือ (Balance)</h3>
+                        <div class="p-2 rounded-lg bg-blue-50 text-blue-600">
+                            <i data-lucide="banknote" class="w-5 h-5"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <div id="displayBalance" class="text-4xl font-bold text-slate-800 tracking-tight">฿0.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left Column: Inputs -->
+                <div class="lg:col-span-7 space-y-6">
+                    
+                    <!-- Income Section -->
+                    <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden card">
+                        <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                            <h2 class="font-semibold text-slate-700 flex items-center gap-2">
+                                <i data-lucide="trending-up" class="w-5 h-5 text-emerald-500"></i>
+                                รายได้ (Income)
+                            </h2>
+                            <span id="displayTotalIncome" class="text-emerald-600 font-bold">฿0.00</span>
+                        </div>
+                        <div class="p-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                            <div class="input-group">
+                                <label class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">เงินเดือน (Salary)</label>
+                                <div class="relative">
+                                    <input type="number" id="salary" oninput="calculateAll()" class="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium text-slate-700 placeholder-slate-300" placeholder="0.00">
+                                    <div class="absolute right-3 top-2 text-slate-400 text-sm pointer-events-none">฿</div>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">ค่าล่วงเวลา (OT)</label>
+                                <div class="relative">
+                                    <input type="number" id="ot" oninput="calculateAll()" class="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium text-slate-700 placeholder-slate-300" placeholder="0.00">
+                                    <div class="absolute right-3 top-2 text-slate-400 text-sm pointer-events-none">฿</div>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">โบนัส (Bonus)</label>
+                                <div class="relative">
+                                    <input type="number" id="bonus" oninput="calculateAll()" class="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium text-slate-700 placeholder-slate-300" placeholder="0.00">
+                                    <div class="absolute right-3 top-2 text-slate-400 text-sm pointer-events-none">฿</div>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">รายได้อื่นๆ (Others)</label>
+                                <div class="relative">
+                                    <input type="number" id="otherIncome" oninput="calculateAll()" class="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium text-slate-700 placeholder-slate-300" placeholder="0.00">
+                                    <div class="absolute right-3 top-2 text-slate-400 text-sm pointer-events-none">฿</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Deduction Section -->
+                    <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden card">
+                        <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                            <h2 class="font-semibold text-slate-700 flex items-center gap-2">
+                                <i data-lucide="file-text" class="w-5 h-5 text-amber-500"></i>
+                                รายการหัก (Deductions)
+                            </h2>
+                            <span id="displayTotalDeduction" class="text-red-500 font-bold">-฿0.00</span>
+                        </div>
+                        <div class="p-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                            <div class="input-group">
+                                <label class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">ประกันสังคม (SSO)</label>
+                                <div class="relative">
+                                    <input type="number" id="socialSecurity" oninput="calculateAll()" class="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium text-slate-700 placeholder-slate-300" placeholder="0.00">
+                                    <div class="absolute right-3 top-2 text-slate-400 text-sm pointer-events-none">฿</div>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">ภาษี (Tax)</label>
+                                <div class="relative">
+                                    <input type="number" id="tax" oninput="calculateAll()" class="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium text-slate-700 placeholder-slate-300" placeholder="0.00">
+                                    <div class="absolute right-3 top-2 text-slate-400 text-sm pointer-events-none">฿</div>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">กองทุนสำรองฯ (P. Fund)</label>
+                                <div class="relative">
+                                    <input type="number" id="providentFund" oninput="calculateAll()" class="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium text-slate-700 placeholder-slate-300" placeholder="0.00">
+                                    <div class="absolute right-3 top-2 text-slate-400 text-sm pointer-events-none">฿</div>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label class="text-xs font-medium text-slate-500 uppercase tracking-wider block mb-1">หักอื่นๆ (Others)</label>
+                                <div class="relative">
+                                    <input type="number" id="otherDeduction" oninput="calculateAll()" class="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium text-slate-700 placeholder-slate-300" placeholder="0.00">
+                                    <div class="absolute right-3 top-2 text-slate-400 text-sm pointer-events-none">฿</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Right Column: Expense List -->
+                <div class="lg:col-span-5">
+                    <section class="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col card">
+                        <div class="bg-slate-50 px-6 py-4 border-b border-slate-100">
+                            <h2 class="font-semibold text-slate-700 flex items-center gap-2">
+                                <i data-lucide="pie-chart" class="w-5 h-5 text-blue-500"></i>
+                                บันทึกค่าใช้จ่าย (Expenses)
+                            </h2>
+                        </div>
+                        
+                        <!-- Add Form -->
+                        <div class="p-4 bg-slate-50/50 border-b border-slate-100" data-html2canvas-ignore="true">
+                            <form onsubmit="addExpense(event)" class="flex gap-2">
+                                <input type="text" id="expenseName" placeholder="รายการ (เช่น ค่าข้าว)" class="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" required>
+                                <input type="number" id="expenseAmount" placeholder="บาท" class="w-24 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" required>
+                                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg transition-colors cursor-pointer">
+                                    <i data-lucide="plus" class="w-5 h-5"></i>
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- List -->
+                        <div class="flex-1 overflow-y-auto max-h-[500px]" id="expenseContainer">
+                            <div id="emptyState" class="h-40 flex flex-col items-center justify-center text-slate-400 text-sm">
+                                <i data-lucide="wallet" class="w-10 h-10 mb-2 opacity-20"></i>
+                                ยังไม่มีรายการค่าใช้จ่าย
+                            </div>
+                            
+                            <table id="expenseTable" class="w-full text-sm text-left hidden">
+                                <thead class="bg-slate-50 text-slate-500 font-medium sticky top-0">
+                                    <tr>
+                                        <th class="px-4 py-3">รายการ</th>
+                                        <th class="px-4 py-3 text-right">จำนวนเงิน</th>
+                                        <th class="px-4 py-3 w-10" data-html2canvas-ignore="true"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="expenseList" class="divide-y divide-slate-100">
+                                    <!-- JS will populate here -->
+                                </tbody>
+                                <tfoot class="bg-slate-50 font-semibold text-slate-700 border-t border-slate-200">
+                                    <tr>
+                                        <td class="px-4 py-3">รวมทั้งหมด</td>
+                                        <td id="tableTotal" class="px-4 py-3 text-right text-red-600">฿0.00</td>
+                                        <td data-html2canvas-ignore="true"></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </div>
+<!-- Footer -->
+        <footer class="text-center py-6 bg-gray-800 text-white text-sm rounded-b-xl">
+            <p>&copy; 2025 Assadang KH. สงวนลิขสิทธิ์.</p>
+        </footer>
+        </main>
+    </div>
+
+    <!-- Custom Modal for Reset Confirmation -->
+    <div id="modal-reset" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
+        <div class="modal-overlay absolute w-full h-full bg-slate-900 opacity-50"></div>
+        
+        <div class="modal-container bg-white w-11/12 md:max-w-md mx-auto rounded-xl shadow-2xl z-50 overflow-y-auto transform scale-95 transition-transform duration-300">
+            <div class="py-4 text-left px-6">
+                <!--Title-->
+                <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+                    <p class="text-2xl font-bold text-slate-800">ยืนยันการล้างข้อมูล</p>
+                    <div class="cursor-pointer z-50 p-2 hover:bg-slate-100 rounded-full transition-colors" onclick="closeModal()">
+                        <i data-lucide="x" class="w-5 h-5 text-slate-500"></i>
+                    </div>
+                </div>
+
+                <!--Body-->
+                <div class="py-6 text-center">
+                    <div class="bg-red-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i data-lucide="alert-triangle" class="w-8 h-8 text-red-500"></i>
+                    </div>
+                    <p class="text-slate-600">
+                        คุณต้องการล้างข้อมูลทั้งหมดใช่หรือไม่? <br>
+                        ข้อมูลที่กรอกไว้จะหายไปทั้งหมด
+                    </p>
+                </div>
+
+                <!--Footer-->
+                <div class="flex justify-end gap-3 pt-2">
+                    <button onclick="closeModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium">
+                        ยกเลิก
+                    </button>
+                    <button onclick="confirmReset()" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-medium shadow-lg shadow-red-500/30">
+                        ยืนยัน ล้างข้อมูล
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data Store
+        let expenses = [];
+        
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+            
+            const dateStr = new Date().toLocaleDateString('th-TH', { month: 'long', year: 'numeric', day: 'numeric' });
+            const reportDateEl = document.getElementById('reportDate');
+            if(reportDateEl) reportDateEl.innerText = dateStr;
+
+            // Set default
+            document.getElementById('socialSecurity').value = 0;
+            calculateAll();
+        });
+
+        // --- Core Functions ---
+
+        function getVal(id) {
+            const el = document.getElementById(id);
+            if (!el) return 0;
+            const val = el.value;
+            return val === '' ? 0 : parseFloat(val);
+        }
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('th-TH', {
+                style: 'currency',
+                currency: 'THB',
+                minimumFractionDigits: 2
+            }).format(amount);
+        }
+
+        function calculateAll() {
+            // 1. Get Income
+            const salary = getVal('salary');
+            const ot = getVal('ot');
+            const bonus = getVal('bonus');
+            const otherIncome = getVal('otherIncome');
+            const totalIncome = salary + ot + bonus + otherIncome;
+
+            // 2. Get Deductions
+            const sso = getVal('socialSecurity');
+            const tax = getVal('tax');
+            const pFund = getVal('providentFund');
+            const otherDed = getVal('otherDeduction');
+            const totalDeductions = sso + tax + pFund + otherDed;
+
+            // 3. Get Expenses
+            const totalExpenses = expenses.reduce((sum, item) => sum + item.amount, 0);
+
+            // 4. Calculate Net & Balance
+            const netIncome = totalIncome - totalDeductions;
+            const balance = netIncome - totalExpenses;
+
+            // 5. Update UI
+            document.getElementById('displayTotalIncome').innerText = formatCurrency(totalIncome);
+            document.getElementById('displayTotalDeduction').innerText = "-" + formatCurrency(totalDeductions);
+            
+            document.getElementById('displayNetIncome').innerText = formatCurrency(netIncome);
+            document.getElementById('displayTotalExpenses').innerText = formatCurrency(totalExpenses);
+            document.getElementById('expenseCount').innerText = `${expenses.length} รายการบันทึก`;
+            
+            document.getElementById('displayBalance').innerText = formatCurrency(balance);
+            document.getElementById('tableTotal').innerText = formatCurrency(totalExpenses);
+
+            // Change Balance Color
+            const balanceEl = document.getElementById('displayBalance');
+            if (balance < 0) {
+                balanceEl.classList.remove('text-slate-800', 'text-emerald-600');
+                balanceEl.classList.add('text-red-600');
+            } else {
+                balanceEl.classList.remove('text-red-600');
+                balanceEl.classList.add('text-slate-800');
+            }
+        }
+
+        function addExpense(e) {
+            e.preventDefault();
+            const nameInput = document.getElementById('expenseName');
+            const amountInput = document.getElementById('expenseAmount');
+            
+            if (!nameInput.value || !amountInput.value) return;
+
+            const newExpense = {
+                id: Date.now(),
+                name: nameInput.value,
+                amount: parseFloat(amountInput.value),
+                date: new Date().toLocaleDateString('th-TH')
+            };
+
+            expenses.push(newExpense);
+            
+            nameInput.value = '';
+            amountInput.value = '';
+            nameInput.focus();
+
+            renderExpenses();
+            calculateAll();
+        }
+
+        function deleteExpense(id) {
+            expenses = expenses.filter(exp => exp.id !== id);
+            renderExpenses();
+            calculateAll();
+        }
+
+        function renderExpenses() {
+            const listEl = document.getElementById('expenseList');
+            const tableEl = document.getElementById('expenseTable');
+            const emptyEl = document.getElementById('emptyState');
+
+            if (expenses.length === 0) {
+                tableEl.classList.add('hidden');
+                emptyEl.classList.remove('hidden');
+                return;
+            }
+
+            tableEl.classList.remove('hidden');
+            emptyEl.classList.add('hidden');
+            
+            listEl.innerHTML = '';
+            expenses.forEach(exp => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-slate-50 group border-b border-slate-50 last:border-0';
+                row.innerHTML = `
+                    <td class="px-4 py-3">
+                        <div class="font-medium text-slate-700">${exp.name}</div>
+                        <div class="text-xs text-slate-400">${exp.date}</div>
+                    </td>
+                    <td class="px-4 py-3 text-right text-slate-700 font-medium">
+                        ${formatCurrency(exp.amount)}
+                    </td>
+                    <td class="px-4 py-3 text-right" data-html2canvas-ignore="true">
+                        <button onclick="deleteExpense(${exp.id})" class="text-slate-300 hover:text-red-500 transition-colors p-1 cursor-pointer">
+                            <i data-lucide="x-circle" class="w-5 h-5"></i>
+                        </button>
+                    </td>
+                `;
+                listEl.appendChild(row);
+            });
+            
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+
+        // --- Modal Logic ---
+        function openModal() {
+            const modal = document.getElementById('modal-reset');
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            const container = modal.querySelector('.modal-container');
+            container.classList.remove('scale-95');
+            container.classList.add('scale-100');
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('modal-reset');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            const container = modal.querySelector('.modal-container');
+            container.classList.remove('scale-100');
+            container.classList.add('scale-95');
+        }
+
+        function confirmReset() {
+            // 1. Clear all inputs
+            const inputs = document.querySelectorAll('input');
+            inputs.forEach(input => input.value = '');
+            
+            // 2. Set default values
+            document.getElementById('socialSecurity').value = 0;
+            
+            // 3. Clear expenses
+            expenses = [];
+            
+            // 4. Update UI
+            renderExpenses();
+            calculateAll();
+            
+            // 5. Close modal
+            closeModal();
+        }
+
+        // --- PDF Logic ---
+        function downloadPDF() {
+            const element = document.getElementById('content-area');
+            const header = document.getElementById('pdf-header');
+            
+            const btn = document.getElementById('btn-export');
+            const icon = document.getElementById('icon-download');
+            const loader = document.getElementById('loader-download');
+            const originalText = btn.lastElementChild.innerText;
+            
+            btn.disabled = true;
+            btn.classList.add('opacity-75', 'cursor-not-allowed');
+            icon.classList.add('hidden');
+            loader.classList.remove('hidden');
+            btn.lastElementChild.innerText = 'กำลังสร้าง PDF...';
+
+            header.classList.remove('hidden');
+
+            const opt = {
+                margin:       [10, 10, 10, 10],
+                filename:     `salary-report-${new Date().toISOString().slice(0,10)}.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true, logging: false },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opt).from(element).save().then(() => {
+                btn.disabled = false;
+                btn.classList.remove('opacity-75', 'cursor-not-allowed');
+                icon.classList.remove('hidden');
+                loader.classList.add('hidden');
+                btn.lastElementChild.innerText = originalText;
+                header.classList.add('hidden');
+            }).catch(err => {
+                console.error(err);
+                btn.disabled = false;
+                btn.classList.remove('opacity-75', 'cursor-not-allowed');
+                icon.classList.remove('hidden');
+                loader.classList.add('hidden');
+                btn.lastElementChild.innerText = originalText;
+                header.classList.add('hidden');
+                
+                // Fallback alert for PDF error only if necessary, but try to avoid
+                // alert("เกิดข้อผิดพลาดในการสร้าง PDF"); 
+            });
+        }
+    </script>
+</body>
+</html>
